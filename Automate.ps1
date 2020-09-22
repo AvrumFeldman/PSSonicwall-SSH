@@ -1,5 +1,6 @@
 function New-SshSession {
     param([parameter(Mandatory)]$server)
+    remove-item env:\swlegacy -ErrorAction:SilentlyContinue
     $global:session = [Renci.SshNet.SshClient]::new($server,"admin",'')
     $session
 }
@@ -19,17 +20,23 @@ function Test-SshSession {
 
 function Connect-SSHSession {
     [cmdletbinding()]
-    param($f_session = $session)
-    if (!($session.IsConnected)) {
-        $f_session.connect()
+    param($ession = $session, $lagecy = $env:swlegacy)
+    if ($session.IsConnected) {
+        throw "We are still connected to the session"
     }
-    $global:shell = $f_session.CreateShellStream("dumb", 0, 0, 0, 0, 3000)
-    write-verbose "$($MyInvocation.MyCommand): Sleeping for 2 seconds to give time for the shell to respond"
+    $session.connect()
+    $global:shell = $session.CreateShellStream("dumb", 0, 0, 0, 0, 3000)
+    Write-verbose "$($MyInvocation.MyCommand): Sleeping for 2 seconds to give time for the shell to respond"
     start-sleep -Seconds 2
-    if ($shell.read() -match "Password:") {
+    if ($shell.read() -notmatch "admin@.*>") {
+        $env:swlegacy = $true
         $shell.Writeline("O5GG9dIq")
         $shell.WriteLine("no cli pager session")
         $shell.WriteLine("cli output-format plain-text")
+    } else {
+        $shell.WriteLine("no cli pager session")
+        $shell.WriteLine("cli format out plain-text")
+        $env:swlegacy = $false
     }
     $shell
 }
