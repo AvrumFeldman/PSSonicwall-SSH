@@ -10,3 +10,4 @@ Please note this is a work in development, development is depending on my work r
 
 # ToDo
 * [ ] Convert it into a Powershell module.
+* [ ] Reduce amount of connectivity checks. (Maybe by storing last execution time and calculating is x amount of time passed...)
