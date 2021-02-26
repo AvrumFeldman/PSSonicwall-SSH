@@ -3,12 +3,12 @@ function Test-SshSession {
     param($loop_level = 0)
     write-debug "$($MyInvocation.MyCommand)[$($loop_level)]"
     if ($loop_level -gt 1) {
-        throw "$($MyInvocation.MyCommand)[$($loop_level)]: Something is worng here. We are already at loop level $($loop_level)."
+        throw "$($MyInvocation.MyCommand)[$($loop_level)]: Something is wrong here. We are already at loop level $($loop_level)."
     }
-    write-verbose "$($MyInvocation.MyCommand)[$($loop_level)]: Testing for session variable"
+    write-verbose "$($MyInvocation.MyCommand)[$($loop_level)]: Testing for session variable."
     if (!(Test-Path variable:\session)) {
         write-verbose "$($MyInvocation.MyCommand)[$($loop_level)]: No SSH session found. Creating a new one. Loop level: $($loop_level)"
-        New-SshSession
+        New-SshSession # This will trigger the request for a server ip, as it's a mandatory parameter on the new-sshsession function.
         Test-SshSession -loop_level ($loop_level + 1)
     } else {
         write-verbose "$($MyInvocation.MyCommand)[$($loop_level)]: Session variable exists."
@@ -18,9 +18,11 @@ function Test-SshSession {
         write-verbose "$($MyInvocation.MyCommand)[$($loop_level)]: SSH session is not connected"
         return $false
         # throw "Not connected to the device. Run Connect-SSHSession to connect and create a new shell."
+    } else {
+        write-verbose "$($MyInvocation.MyCommand)[$($loop_level)]: session is open"
+        return $true
     }
-    write-verbose "$($MyInvocation.MyCommand)[$($loop_level)]: session is open"
-    return $true
+
 }
 
 function Test-SshShell {
@@ -42,7 +44,7 @@ function Test-SshShell {
         }
 
     } else {
-        write-verbose "$($MyInvocation.MyCommand): The SSH session is either not connected."
+        write-verbose "$($MyInvocation.MyCommand): The SSH session is not connected."
         write-verbose "$($MyInvocation.MyCommand): Run connect-sshsession to connect."
         return $false
     }
@@ -75,21 +77,30 @@ function Test-SshConfigMode {
 }
 
 function New-SshSession {
-    param([parameter(Mandatory)]$server)
+    param(
+        [parameter(Mandatory)]$server,
+        [parameter(Mandatory)]$plaintext_password
+        )
     write-debug "$($MyInvocation.MyCommand)"
     remove-item env:\swlegacy -ErrorAction:SilentlyContinue
     if ($server) {
         $global:session = [Renci.SshNet.SshClient]::new($server,"admin",$plaintext_password)
-        $session.ConnectionInfo.Timeout = [timespan]::FromSeconds(5)
-        $session.ConnectionInfo.RetryAttempts = 5
+        $global:session.ConnectionInfo.Timeout = [timespan]::FromSeconds(5)
+        $global:session.ConnectionInfo.RetryAttempts = 5
     }
     # $session
 }
 
 function Connect-SSHSession {
     [cmdletbinding()]
-    param($session = $session, $lagecy = $env:swlegacy,$loop_level = 0)
+    param(
+        $session = $session,
+        $lagecy = $env:swlegacy,
+        $loop_level = 0
+    )
+
     write-debug "$($MyInvocation.MyCommand)[$($loop_level)]"
+
     if ($loop_level -gt 1) {
         throw "$($MyInvocation.MyCommand)[$($loop_level)]: Something is worng here. We are already at loop level $($loop_level)."
     }
@@ -104,7 +115,7 @@ function Connect-SSHSession {
         Throw "Unable to connect to device."
     }
     $connectd = Test-SshSession
-    Write-Verbose "$($MyInvocation.MyCommand)[$($loop_level)]: $connectd"
+    Write-Verbose "$($MyInvocation.MyCommand)[$($loop_level)]: $connected"
     if ($connectd) {
         $global:shell = $session.CreateShellStream("dumb", 0, 0, 0, 0, 3000)
         write-verbose "$($MyInvocation.MyCommand)[$($loop_level)]: Sleeping for 2 seconds to give time for the shell to respond"
@@ -119,7 +130,9 @@ function Connect-SSHSession {
             $global:shell.WriteLine("cli format out plain-text")
             $env:swlegacy = $false
         }
-        $global:shell
+        if ($global:shell) {
+            write-output "$($MyInvocation.MyCommand)[$($loop_level)]: We have shell access"
+        }
     } else {
         Write-Verbose "$($MyInvocation.MyCommand)[$($loop_level)]: We are still not connected. Attempting again."
         Connect-SSHSession -loop_level ($loop_level + 1)
@@ -150,4 +163,4 @@ function Enter-SshConfigmode {
     } else {
         $true
     }
-} 
+}
